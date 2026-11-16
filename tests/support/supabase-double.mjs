@@ -57,6 +57,7 @@ const server = createServer(async (req,res) => {
     if(url.pathname==='/twirp/livekit.RoomService/ListRooms')return send(200,{rooms:[...rooms.values()].filter(room=>!body.names?.length||body.names.includes(room.name))});
     if(url.pathname==='/twirp/livekit.RoomService/UpdateRoomMetadata'){const room=rooms.get(body.room);room.metadata=body.metadata;return send(200,room);}
     if(url.pathname==='/twirp/livekit.AgentDispatchService/ListDispatch')return send(200,{agentDispatches:dispatches.get(body.room)||[]});
+    if(url.pathname==='/twirp/livekit.AgentDispatchService/DeleteDispatch'){dispatches.set(body.room,(dispatches.get(body.room)||[]).filter(item=>item.id!==body.dispatchId));return send(200,{});}
     if(url.pathname==='/twirp/livekit.AgentDispatchService/CreateDispatch'){const dispatch={id:'AD_'+randomUUID(),agentName:body.agentName,room:body.room};dispatches.set(body.room,[dispatch]);return send(200,dispatch);}
     if(url.pathname==='/health') return send(200,{ok:true});
     if(url.pathname==='/_test/email') {

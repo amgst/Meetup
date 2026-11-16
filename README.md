@@ -115,7 +115,7 @@ The first three values enable media. The Supabase service-role key is used only 
 - Official LiveKit React Components provide the participant grid/focus layout, speaker indicators, microphone/camera controls, screen sharing, nonpersistent chat and a leave button. Additional UI shows participant names and connection state. Settings expose microphone, camera and speaker choices where the browser supports them. Camera capture targets 720p; actual quality depends on device, bandwidth and LiveKit adaptation.
 - `POST /api/livekit/token` checks same-origin requests, validates input, confirms the owner session or invitation against PostgreSQL, rejects unavailable/locked meetings, and mints a five-minute room-scoped token. Browser tokens have no room-administrator grant. Host identity comes from the verified user; guests get a signed HttpOnly per-room identity cookie so rejoining from the same browser does not invent another identity.
 - The endpoint creates/checks a LiveKit room with `maxParticipants=10`, rejects a full-room snapshot for a new identity, and embeds the same room configuration in tokens for automatic recreation. These are integration guards, not proof of race-safe admission. Phase 5 still needs atomic database reservations and full concurrency/reconnect tests; do not advertise the 10-person cap as verified yet.
-- Tokens are held in component memory. The SDK handles connection/reconnection; a terminal disconnect returns to device setup and a new join requests fresh authorization. Existing issued tokens can remain valid until their five-minute expiry after invitation revocation. Phase 5 must address immediate removal/termination and token invalidation. No host moderation buttons are presented yet.
+- Tokens are held in component memory. The SDK handles connection/reconnection; a terminal disconnect returns to device setup and a new join requests fresh authorization. Existing issued tokens can remain valid until their five-minute expiry after invitation revocation. Phase 5 must address immediate removal/termination and token invalidation. Host controls now include presenter permissions and lowering raised hands; removal and full room moderation remain pending.
 - LiveKit SDK 2.22.0 is pinned for compatibility with the installed Node runtime. Server and UI SDK versions are pinned in the lockfile.
 
 ### Verified webhooks
@@ -132,9 +132,9 @@ Before launch, verify an actual host and guest call on separate devices: audio b
 
 ## Vercel redirect configuration
 
-For the production deployment, set `APP_URL=https://meetup-blue-mu.vercel.app` in Vercel environment settings and redeploy. The proxy now preserves the current request origin independently of APP_URL, including preview deployment domains. Same-origin video token checks follow the same rule. Arbitrary forwarded-host headers are not used to choose redirect targets.
+For the production deployment, set `APP_URL=https://meet.wbify.com` in Vercel environment settings and redeploy. The proxy now preserves the current request origin independently of APP_URL, including preview deployment domains. Same-origin video token checks follow the same rule. Arbitrary forwarded-host headers are not used to choose redirect targets.
 
-In Supabase Authentication > URL Configuration, set Site URL to `https://meetup-blue-mu.vercel.app` and add the exact deployed `/auth/callback`, `/auth/callback?next=/reset-password` and `/auth/confirm` redirect URLs. Email templates using SiteURL still depend on the Supabase setting and cannot be corrected by frontend code. Keep localhost URLs as additional allowed URLs only while local development is needed.
+In Supabase Authentication > URL Configuration, set Site URL to `https://meet.wbify.com` and add the exact deployed `/auth/callback`, `/auth/callback?next=/reset-password` and `/auth/confirm` redirect URLs. Email templates using SiteURL still depend on the Supabase setting and cannot be corrected by frontend code. Keep localhost URLs as additional allowed URLs only while local development is needed.
 
 Authentication/video browser regression checks deliberately use a stale localhost APP_URL and assert that anonymous navigation stays on the current deployment origin.
 
@@ -145,3 +145,12 @@ The in-call View selector offers Grid, Spotlight and Sidebar. Click a tile or ch
 The conference uses stable identity/source keys and first-seen ordering, a single persistent LiveKit Room instance, and a small-viewport-height layout. Speaking updates affect tile indicators rather than participant ordering. Screen shares appear as additional tiles and can be focused manually. Chat overlays the stage without resizing the tile grid. Camera/microphone/share/chat/device/leave controls remain available.
 
 `tests/layouts.spec.ts` uses SDK-simulated participants in a build-gated test route. It checks that speaker/track-list updates do not remove tile nodes, change order, reset mobile scrolling, or replace a manually chosen focus. Real-device media/OS/browser flicker still needs validation after deployment; these tests do not simulate a real mobile WebRTC call.
+
+
+## Hands, reactions, presenters and transcription
+
+Apply migration `202611160004_interactions.sql`. Participants can raise/lower their hands and send temporary emoji reactions. People & presenters lists raised hands in order; the host can lower hands and grant/revoke screen sharing. Guests initially have camera/microphone permission only. Presenter grants persist across rejoining with the same signed guest identity. The server validates the host account or invitation and derives identity from the session/cookie for every command; browser input cannot select its own role. Old issued presenter tokens may retain their grant until the five-minute expiry, so immediate revocation across all reconnect cases remains part of Phase 5.
+
+The Transcript panel dispatches a separate LiveKit-hosted speech-to-text worker. Participants explicitly opt in before their microphone is subscribed. The host can stop transcription; each browser can download speaker-labelled text as TXT. Text is session-only, capped at 2,000 segments, and not replayed to late joiners. No audio recording or transcript database is added.
+
+Set `TRANSCRIPTION_ENABLED=true` and `TRANSCRIPTION_AGENT_NAME=wbify-transcriber` in Vercel and redeploy this code. The cloud worker is deployed separately; see [worker setup and verification](agents/transcription/README.md). Desktop/mobile interaction tests, database permission tests and worker consent tests cover implementation behavior. A real meeting with spoken audio remains necessary to validate end-to-end transcription after deployment.

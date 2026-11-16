@@ -51,6 +51,11 @@ export async function POST(request:NextRequest){
         if(!existing.some(item=>item.agentName===agentName))await dispatch.createDispatch(input.roomId,agentName);
       }
       await service.updateRoomMetadata(input.roomId,JSON.stringify({...metadata,'wbify.transcription':cmd.enabled?'active':'off'}));
+      if(!cmd.enabled){
+        const config=getLiveKitConfig();const dispatch=new AgentDispatchClient(config.url.replace(/^ws/,'http'),config.apiKey,config.apiSecret);
+        const agentName=process.env.TRANSCRIPTION_AGENT_NAME||'wbify-transcriber';
+        for(const item of await dispatch.listDispatch(input.roomId))if(item.agentName===agentName)await dispatch.deleteDispatch(item.id,input.roomId);
+      }
     }
     return json({ok:true});
   }catch{return json({error:'The meeting action failed. Rejoin if your session expired, or retry.'},503);}
