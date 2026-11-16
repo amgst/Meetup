@@ -1,0 +1,10 @@
+'use client';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { MeetingProvider } from '@/components/meetings/meeting-provider';
+const navigation = [{ href: '/dashboard', label: 'Dashboard', icon: '▦' }, { href: '/meetings', label: 'My meetings', icon: '▤' }, { href: '/meetings/schedule', label: 'Schedule meeting', icon: '◷' }, { href: '/settings', label: 'Settings', icon: '⚙' }];
+export function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const current = navigation.find(item => item.href === pathname);
+  return <MeetingProvider><div className="app"><aside className="side"><Link href="/dashboard" className="brand"><div className="logo">✦</div><span>WBIFY <span className="font-medium">Meet</span></span></Link><div><p className="smallcap">WORKSPACE</p><nav className="nav" aria-label="Main navigation">{navigation.map(item => <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''} aria-current={pathname === item.href ? 'page' : undefined}><span className="ico" aria-hidden>{item.icon}</span><span>{item.label}</span></Link>)}</nav></div><div className="sideBottom"><div className="avatar">W</div><div><b>Your workspace</b><br /><span className="text-slate-400">Development preview</span></div></div></aside><div className="content"><header className="top"><div className="topTitle">{current?.label || 'Workspace'}</div><div className="topright"><span className="pill">Phase 1 preview</span><span className="avatar">W</span></div></header><main className="main"><div className="notice">Frontend preview · Meetings are saved only in this browser. Account sign-in and LiveKit video will be connected in the next phases.</div>{children}</main></div></div><nav className="mobileNav" aria-label="Mobile navigation">{navigation.map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? 'page' : undefined}>{item.label === 'Schedule meeting' ? 'Schedule' : item.label}</Link>)}</nav></MeetingProvider>;
+}

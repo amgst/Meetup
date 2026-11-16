@@ -1,31 +1,32 @@
-# WBIFY Meet — SaaS architecture
+# WBIFY Meet architecture
 
-## MVP boundary
+## Current implementation
 
-The deployed preview is a static, browser-local prototype. It supports creating and sharing room links, joining via links, scheduling locally, and a *temporary* third-party Jitsi meeting iframe. Meeting records are stored only in the creator's browser. It does **not** provide production authentication, durable shared scheduling, LiveKit, or an enforced 10-user room cap. Jitsi availability and host authentication depend on the external provider.
+Phase 1 replaces the frontend structure with Next.js App Router, React, TypeScript, and Tailwind. The original design is retained through extracted CSS and reusable React components. The existing `dist/` prototype remains independent and unchanged by this migration.
 
-## Production architecture (10 participants per room)
+The root redirects to `/dashboard`. A shared workspace layout contains `/dashboard`, `/meetings`, `/meetings/schedule`, and `/settings`. Browser-local meeting state lives behind `MeetingProvider`; it will be replaced with authenticated server/database access. `/room/[roomId]` is a dark placeholder with room-format validation, not a live meeting. Dashboard routes intentionally remain public in this first frontend phase.
 
-- Frontend: Next.js, TypeScript, Tailwind; dashboard, meeting prejoin, room grid, host UI.
-- API: Next.js server routes (or a separate Node service) for authentication, rooms, invitations, participants, recording metadata and billing.
-- Identity: Auth.js with verified email login, session cookies, CSRF controls and role checks.
-- PostgreSQL (Neon): `users`, `organizations`, `memberships`, `rooms`, `room_invites`, `room_sessions`, `room_participants`, `recordings`, `subscriptions`, `audit_events`.
-- RTC: LiveKit Cloud initially; all token minting happens server-side; never expose API secret to browser. LiveKit connects users through its SFU and TURN services.
-- Admission: issue short-lived room grants only after authentication/guest-invite validation. Enforce <=10 with an atomic admission reservation in PostgreSQL (unique room/session/participant, transactional lock) and reconcile with LiveKit webhooks. Do not rely on client count; reject 11th connection, including reconnect edge cases.
-- Media: LiveKit participant state and WebRTC tracks. Data channel for chat; optional persistent chat to PostgreSQL.
-- Recording (phase 2): LiveKit Egress -> private S3/R2 with signed download URLs, retention controls and recording consent.
-- Scheduling: server-side timestamps in UTC, client-local display; email invites and reminders from a transactional provider.
-- Security: rate limiting, room ID entropy, account/guest permissions, host roles, moderation, audit events, data retention, encrypted transport, webhook signature verification.
-- Operations: error tracking, media quality metrics, structured logging, LiveKit concurrency and egress usage alerts, automated database backups.
+## Target production boundaries
 
-## First production milestones
+- Next.js on Vercel renders the UI and handles authorized server mutations and token APIs.
+- Supabase Auth manages identities, verified sessions and account recovery. Protected routes must validate the session server-side, with a Next.js proxy refreshing cookies. Browser sessions from the original static prototype are not automatically SSR cookies.
+- Supabase PostgreSQL stores profiles, meetings, participants, invitations, sessions and admissions. RLS limits user access. Administrative server clients must still explicitly verify host ownership before mutations.
+- LiveKit Cloud transports media; official LiveKit React Components supply the meeting interface. Secrets and token generation stay server-side. The Phase 1 server module offers only room-service and webhook-receiver factories.
+- Supabase Realtime may deliver waiting-room/admission changes once RLS and host permissions are defined. No additional state library is needed yet.
 
-1. Bootstrap Next.js + PostgreSQL schema and migrations; add Auth.js.
-2. Replace localStorage records with authenticated room CRUD and invitation routes.
-3. Add LiveKit server API and signed short-lived access tokens; implement web meeting grid and controls.
-4. Implement atomic 10-seat admission with reconnect handling and test with 11 concurrent clients.
-5. Harden, monitor, test mobile/network interruptions and launch limited private pilot.
+## Admission and lifecycle design for Phase 5
 
-## Deployment separation
+Use transactional PostgreSQL admission reservations scoped to the current meeting session. Lock the session row, reconcile valid reservations, and atomically reject reservation 11. Keep participant identity stable across reconnects; renew reservations rather than consuming another seat. Mint short-lived LiveKit grants only after a successful reservation and server-side identity/invitation checks. Configure LiveKit's room capacity as an additional guard, not the only source of admission truth.
 
-Vercel serves UI and REST APIs; Neon persists data; LiveKit Cloud transports video. Recordings should use private object storage. A self-hosted LiveKit instance can be evaluated later for cost/control, but needs a publicly accessible UDP/TCP media path and TURN/TLS.
+Reservations, token validity, disconnect grace periods and reconciliation must be designed together so an expired reservation cannot admit another user while a previous token or active participant still occupies that seat. Verified idempotent webhooks update connected/disconnected state; scheduled reconciliation handles missing, duplicate and reordered events. Host removal must revoke re-entry server-side; ending must close the DB session and the LiveKit room. Test simultaneous joins and reconnects before claiming capacity enforcement.
+
+## Migration and rollout
+
+1. Finish the frontend foundation and verify its local browser workflows.
+2. Add Supabase SSR auth, protected routes, profile UI and production SQL migrations with indexes, timestamps, constraints and RLS tests. Reconcile the prototype's existing `public.meetings` schema explicitly before changing it.
+3. Replace local meeting state with durable authenticated operations and securely validated invitations.
+4. Add LiveKit video and verified lifecycle webhooks.
+5. Implement and stress-test waiting room, host actions, admission enforcement and rate limiting.
+6. Validate multi-user video, mobile devices, reconnect behavior and Vercel staging before launch.
+
+Recording, subscriptions, transcription, calendars and workspaces remain future extensions. Their database foundations can be added in Phase 2 without enabling paid or recording behavior.
