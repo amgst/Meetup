@@ -13,6 +13,8 @@ grant execute on function auth.uid() to anon,authenticated,service_role;`);
 await db.exec(await readFile(new URL('../../supabase/migrations/202611160001_phase2.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../../supabase/migrations/202611160002_phase3.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../../supabase/migrations/202611160003_phase4.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../../supabase/migrations/202611160004_interactions.sql',import.meta.url),'utf8'));
+const roomMembers=new Map();const dispatches=new Map();
 const rooms=new Map();
 const fullRooms=new Set();
 const accounts = new Map();
@@ -37,12 +39,25 @@ const server = createServer(async (req,res) => {
     let text='';for await (const chunk of req) text+=chunk;
     const body = text ? JSON.parse(text) : {};
     const account = accessTokens.get((req.headers.authorization || '').replace(/^Bearer /,''));
+    if(url.pathname==='/_test/member')return send(200,roomMembers.get(`${url.searchParams.get('room')}:${url.searchParams.get('identity')}`)||{});
+    if(url.pathname==='/_test/participant'){roomMembers.set(`${body.room}:${body.identity}`,{sid:'PA_'+randomUUID(),identity:body.identity,name:body.name||'Member',attributes:body.attributes||{},tracks:[]});return send(200,{});}
     if(url.pathname==='/_test/full-room'){fullRooms.add(body.room);return send(200,{});}
     if(url.pathname==='/_test/events')return send(200,(await db.query('select id,event from livekit_events where meeting_id=$1',[url.searchParams.get('room')])).rows);
     if(url.pathname==='/twirp/livekit.RoomService/CreateRoom'){
       const room=rooms.get(body.name)||{sid:'RM_'+randomUUID(),name:body.name,maxParticipants:body.maxParticipants};rooms.set(body.name,room);return send(200,room);
     }
-    if(url.pathname==='/twirp/livekit.RoomService/ListParticipants')return send(200,{participants:fullRooms.has(body.room)?Array.from({length:10},(_,n)=>({identity:'occupied-'+n})):[]});
+    if(url.pathname==='/twirp/livekit.RoomService/ListParticipants')return send(200,{participants:fullRooms.has(body.room)?Array.from({length:10},(_,n)=>({identity:'occupied-'+n})):[...roomMembers.entries()].filter(([key])=>key.startsWith(body.room+':')).map(([,value])=>value)});
+    if(url.pathname==='/twirp/livekit.RoomService/GetParticipant'){
+      const member=roomMembers.get(`${body.room}:${body.identity}`);return member?send(200,member):send(404,{code:'not_found',msg:'Participant not found'});
+    }
+    if(url.pathname==='/twirp/livekit.RoomService/UpdateParticipant'){
+      const member=roomMembers.get(`${body.room}:${body.identity}`);if(!member)return send(404,{code:'not_found',msg:'Participant not found'});
+      member.attributes={...member.attributes,...body.attributes};if(body.permission)member.permission=body.permission;return send(200,member);
+    }
+    if(url.pathname==='/twirp/livekit.RoomService/ListRooms')return send(200,{rooms:[...rooms.values()].filter(room=>!body.names?.length||body.names.includes(room.name))});
+    if(url.pathname==='/twirp/livekit.RoomService/UpdateRoomMetadata'){const room=rooms.get(body.room);room.metadata=body.metadata;return send(200,room);}
+    if(url.pathname==='/twirp/livekit.AgentDispatchService/ListDispatch')return send(200,{agentDispatches:dispatches.get(body.room)||[]});
+    if(url.pathname==='/twirp/livekit.AgentDispatchService/CreateDispatch'){const dispatch={id:'AD_'+randomUUID(),agentName:body.agentName,room:body.room};dispatches.set(body.room,[dispatch]);return send(200,dispatch);}
     if(url.pathname==='/health') return send(200,{ok:true});
     if(url.pathname==='/_test/email') {
       const token = [...emailTokens.entries()].reverse().find(([,t])=>t.email===url.searchParams.get('email'));
@@ -86,12 +101,14 @@ const server = createServer(async (req,res) => {
     }
     if(url.pathname.startsWith('/rest/v1/')) {
       const serviceRole=req.headers.apikey==='local-test-service-key';
-      if(!serviceRole && !account && url.pathname!=='/rest/v1/rpc/validate_meeting_invitation') return send(401,{message:'Not authenticated'});
+      if(!serviceRole && !account && !['/rest/v1/rpc/validate_meeting_invitation','/rest/v1/rpc/meeting_presenter_access'].includes(url.pathname)) return send(401,{message:'Not authenticated'});
       const table = url.pathname.slice('/rest/v1/'.length);
       const result=await db.transaction(async tx=>{
         await tx.exec(serviceRole?'set local role service_role':account ? 'set local role authenticated' : 'set local role anon');
         await tx.query("select set_config('request.jwt.claim.sub',$1,true)",[account?.user.id || '']);
         const rpcs={
+          'rpc/meeting_presenter_access':{args:['p_meeting_id','p_identity','p_token'],list:false},
+          'rpc/set_meeting_presenter':{args:['p_meeting_id','p_identity','p_enabled'],list:false},
           'rpc/record_livekit_event':{args:['p_id','p_kind','p_room_id','p_room_sid','p_identity','p_name','p_when'],list:false},
           'rpc/cancel_own_meeting':{args:['meeting_id'],list:false},
           'rpc/edit_own_meeting':{args:['p_meeting_id','p_title','p_notes','p_starts_at'],list:false},

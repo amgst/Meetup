@@ -1,4 +1,7 @@
 node_modules/
+.tools/
+.venv-transcription/
+**/__pycache__/
 .next/
 .next-test/
 out/

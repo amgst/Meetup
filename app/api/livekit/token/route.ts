@@ -36,9 +36,15 @@ export async function POST(request:NextRequest){
     const identity=isHost?`user-${user!.id}`:guest.identity;
     const participants=await service.listParticipants(input.roomId);
     if(participants.length>=maxParticipants && !participants.some(p=>p.identity===identity))return json({error:'This meeting is full. Please try again after someone leaves.'},409);
-    const token=await mintParticipantToken(config,input.roomId,identity,input.name,isHost);
+    let presenter=isHost;
+    if(!isHost){
+      const {data,error}=await client.rpc('meeting_presenter_access',{p_meeting_id:input.roomId,p_identity:identity,p_token:input.invitationToken!});
+      if(error)return json({error:'Presenter permissions need the latest database migration. Please contact the host.'},503);
+      presenter=data;
+    }
+    const token=await mintParticipantToken(config,input.roomId,identity,input.name,isHost,presenter);
     const response=json({token,serverUrl:config.url});
-    if(!isHost)response.cookies.set(cookieName,guest.cookie,{httpOnly:true,sameSite:'strict',secure:new URL(requestOrigin(request)).protocol==='https:',maxAge:86400,path:'/api/livekit/token'});
+    if(!isHost)response.cookies.set(cookieName,guest.cookie,{httpOnly:true,sameSite:'strict',secure:new URL(requestOrigin(request)).protocol==='https:',maxAge:86400,path:'/api/livekit'});
     return response;
   }catch{return json({error:'Unable to connect to the video service. Check the LiveKit project settings and retry.'},503);}
 }

@@ -11,6 +11,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      set_meeting_presenter:{Args:{p_meeting_id:string;p_identity:string;p_enabled:boolean};Returns:boolean};
+      meeting_presenter_access:{Args:{p_meeting_id:string;p_identity:string;p_token:string};Returns:boolean};
       record_livekit_event: { Args: { p_id:string; p_kind:string; p_room_id:string; p_room_sid:string; p_identity:string; p_name:string; p_when:string }; Returns:boolean };
       cancel_own_meeting: { Args: { meeting_id: string }; Returns: boolean };
       edit_own_meeting: { Args: { p_meeting_id: string; p_title: string; p_notes: string; p_starts_at: string }; Returns: boolean };
