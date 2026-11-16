@@ -11,6 +11,10 @@ create function auth.uid() returns uuid language sql stable as $$ select nullif(
 grant usage on schema public,auth to anon,authenticated,service_role;
 grant execute on function auth.uid() to anon,authenticated,service_role;`);
 await db.exec(await readFile(new URL('../../supabase/migrations/202611160001_phase2.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../../supabase/migrations/202611160002_phase3.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../../supabase/migrations/202611160003_phase4.sql',import.meta.url),'utf8'));
+const rooms=new Map();
+const fullRooms=new Set();
 const accounts = new Map();
 const refreshTokens = new Map();
 const emailTokens = new Map();
@@ -33,6 +37,12 @@ const server = createServer(async (req,res) => {
     let text='';for await (const chunk of req) text+=chunk;
     const body = text ? JSON.parse(text) : {};
     const account = accessTokens.get((req.headers.authorization || '').replace(/^Bearer /,''));
+    if(url.pathname==='/_test/full-room'){fullRooms.add(body.room);return send(200,{});}
+    if(url.pathname==='/_test/events')return send(200,(await db.query('select id,event from livekit_events where meeting_id=$1',[url.searchParams.get('room')])).rows);
+    if(url.pathname==='/twirp/livekit.RoomService/CreateRoom'){
+      const room=rooms.get(body.name)||{sid:'RM_'+randomUUID(),name:body.name,maxParticipants:body.maxParticipants};rooms.set(body.name,room);return send(200,room);
+    }
+    if(url.pathname==='/twirp/livekit.RoomService/ListParticipants')return send(200,{participants:fullRooms.has(body.room)?Array.from({length:10},(_,n)=>({identity:'occupied-'+n})):[]});
     if(url.pathname==='/health') return send(200,{ok:true});
     if(url.pathname==='/_test/email') {
       const token = [...emailTokens.entries()].reverse().find(([,t])=>t.email===url.searchParams.get('email'));
@@ -75,12 +85,28 @@ const server = createServer(async (req,res) => {
       return send(204,{});
     }
     if(url.pathname.startsWith('/rest/v1/')) {
-      if(!account) return send(401,{message:'Not authenticated'});
+      const serviceRole=req.headers.apikey==='local-test-service-key';
+      if(!serviceRole && !account && url.pathname!=='/rest/v1/rpc/validate_meeting_invitation') return send(401,{message:'Not authenticated'});
       const table = url.pathname.slice('/rest/v1/'.length);
       const result=await db.transaction(async tx=>{
-        await tx.exec('set local role authenticated');
-        await tx.query("select set_config('request.jwt.claim.sub',$1,true)",[account.user.id]);
-        if(table==='rpc/cancel_own_meeting') return (await tx.query('select public.cancel_own_meeting($1) as value',[body.meeting_id])).rows[0].value;
+        await tx.exec(serviceRole?'set local role service_role':account ? 'set local role authenticated' : 'set local role anon');
+        await tx.query("select set_config('request.jwt.claim.sub',$1,true)",[account?.user.id || '']);
+        const rpcs={
+          'rpc/record_livekit_event':{args:['p_id','p_kind','p_room_id','p_room_sid','p_identity','p_name','p_when'],list:false},
+          'rpc/cancel_own_meeting':{args:['meeting_id'],list:false},
+          'rpc/edit_own_meeting':{args:['p_meeting_id','p_title','p_notes','p_starts_at'],list:false},
+          'rpc/issue_meeting_invitation':{args:['p_meeting_id','p_token_hash','p_expires_at'],list:false},
+          'rpc/list_own_invitations':{args:['p_meeting_id'],list:true},
+          'rpc/revoke_own_invitation':{args:['p_invitation_id'],list:false},
+          'rpc/validate_meeting_invitation':{args:['p_meeting_id','p_token'],list:true},
+        };
+        if(rpcs[table]){
+          const rpc=rpcs[table];const params=rpc.args.map((_,index)=>'$'+(index+1)).join(',');
+          const functionName=table.slice(4);
+          const query=rpc.list?`select * from public.${functionName}(${params})`:`select public.${functionName}(${params}) as value`;
+          const {rows}=await tx.query(query,rpc.args.map(name=>body[name]));
+          return rpc.list?rows:rows[0].value;
+        }
         if(table==='profiles') {
           if(req.method==='PATCH') await tx.query('update profiles set display_name=$1,timezone=$2 where id=$3',[body.display_name,body.timezone,account.user.id]);
           return (await tx.query('select * from profiles where id=$1',[account.user.id])).rows;
@@ -90,7 +116,8 @@ const server = createServer(async (req,res) => {
             await tx.query('insert into meetings(id,owner_id,title,starts_at,scheduled,notes) values($1,$2,$3,$4,$5,$6)',[body.id,body.owner_id,body.title,body.starts_at,body.scheduled,body.notes]);
             return null;
           }
-          return (await tx.query("select * from meetings where status<>'cancelled' order by created_at desc")).rows;
+          const id=url.searchParams.get('id');
+          return (await tx.query('select * from meetings'+(id?' where id=$1':'')+' order by created_at desc',id?[id.slice(3)]:[])).rows;
         }
         throw new Error('Unknown test endpoint');
       });

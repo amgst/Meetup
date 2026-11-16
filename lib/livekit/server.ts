@@ -6,14 +6,13 @@ const configSchema = z.object({
   apiKey: z.string().min(1),
   apiSecret: z.string().min(1),
 });
-function config() { return configSchema.parse({ url: process.env.LIVEKIT_URL, apiKey: process.env.LIVEKIT_API_KEY, apiSecret: process.env.LIVEKIT_API_SECRET }); }
+export function getLiveKitConfig() { return configSchema.parse({ url: process.env.LIVEKIT_URL, apiKey: process.env.LIVEKIT_API_KEY, apiSecret: process.env.LIVEKIT_API_SECRET }); }
+export function isLiveKitConfigured() { return configSchema.safeParse({url:process.env.LIVEKIT_URL,apiKey:process.env.LIVEKIT_API_KEY,apiSecret:process.env.LIVEKIT_API_SECRET}).success; }
 export function createRoomService() {
-  const { url, apiKey, apiSecret } = config();
+  const { url, apiKey, apiSecret } = getLiveKitConfig();
   return new RoomServiceClient(url.replace(/^ws/, 'http'), apiKey, apiSecret);
 }
 export function createWebhookReceiver() {
-  const { apiKey, apiSecret } = config();
+  const { apiKey, apiSecret } = getLiveKitConfig();
   return new WebhookReceiver(apiKey, apiSecret);
 }
-// Deliberately no token endpoint yet. Phase 4/5 must validate identity,
-// invitations, meeting state and atomic admission before minting tokens.

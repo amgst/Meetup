@@ -8,11 +8,14 @@
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "test:e2e": "node scripts/test-e2e.mjs",
-    "test:db": "node tests/database/rls.mjs"
+    "test:db": "node tests/database/rls.mjs && node tests/database/invitations.mjs && node tests/database/livekit.mjs"
   },
   "dependencies": {
+    "@livekit/components-react": "2.9.25",
+    "@livekit/components-styles": "1.2.0",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.119.0",
+    "livekit-client": "2.22.0",
     "livekit-server-sdk": "2.20.0",
     "next": "16.4.6",
     "react": "19.3.1",

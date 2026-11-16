@@ -10,7 +10,15 @@ export type Database = {
       meetings: { Row: MeetingRow; Insert: Pick<MeetingRow,'id' | 'owner_id' | 'title' | 'starts_at'> & Partial<Pick<MeetingRow,'scheduled' | 'notes'>>; Update: never; Relationships: [] };
     };
     Views: Record<string, never>;
-    Functions: { cancel_own_meeting: { Args: { meeting_id: string }; Returns: boolean } };
+    Functions: {
+      record_livekit_event: { Args: { p_id:string; p_kind:string; p_room_id:string; p_room_sid:string; p_identity:string; p_name:string; p_when:string }; Returns:boolean };
+      cancel_own_meeting: { Args: { meeting_id: string }; Returns: boolean };
+      edit_own_meeting: { Args: { p_meeting_id: string; p_title: string; p_notes: string; p_starts_at: string }; Returns: boolean };
+      issue_meeting_invitation: { Args: { p_meeting_id: string; p_token_hash: string; p_expires_at: string }; Returns: string };
+      list_own_invitations: { Args: { p_meeting_id: string }; Returns: import('./meeting').Invitation[] };
+      revoke_own_invitation: { Args: { p_invitation_id: string }; Returns: boolean };
+      validate_meeting_invitation: { Args: { p_meeting_id: string; p_token: string }; Returns: import('./meeting').GuestMeeting[] };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

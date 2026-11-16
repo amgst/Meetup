@@ -1,5 +1,25 @@
 # WBIFY Meet architecture
 
+## Phase 4 integration
+
+The server token route validates the current owner session or guest invitation and meeting state, then creates/checks a capped LiveKit room and signs a short-lived non-admin grant. A signed per-room guest cookie preserves identity on reconnect. The token also carries matching room creation settings, avoiding an uncapped auto-created room if it expires between creation and join. A participant snapshot provides a friendly full-room response, not an atomic admission reservation.
+
+The client loads official LiveKit components after authorization, offers camera/mic-off device setup and connects only after user submission. SDK components handle the grid, focused screen share, chat, controls, audio playback and reconnect status. Host management and the database admission transaction remain Phase 5.
+
+Verified webhook events are persisted through a service-role-only RPC with deduplication and lifecycle timestamps. Browser roles cannot access the event table or RPC. The service-role key is read only by the webhook route. No raw webhook payload, chat or media is stored. Provider delivery requires public HTTPS and separate configuration.
+
+Tests cover authorization/control-plane behavior with doubles and lifecycle SQL in embedded PostgreSQL. Real WebRTC calls, reconnect behavior, immediate revocation and the 10-participant limit are unverified until real cloud configuration and multi-user testing.
+
+## Phase 3 implementation
+
+Owner-only RPCs manage meeting edits and invitation creation/revocation. A random 256-bit secret is returned to the host only once and stored as a SHA-256 hash. The guest validation RPC takes the raw secret and computes the hash within PostgreSQL. Anonymous roles can execute only that narrow lookup and cannot read invitation tables or host-only RPCs.
+
+Invitation links keep the raw token in the URL fragment. The room page sends no private details until an owner session or valid capability is confirmed. Public guest results contain title, schedule and expiry only. Room metadata disables indexing and referrers. UI checks are informational; Phase 4 must recheck the same capability before token minting.
+
+Invitation creation, cancellation and revocation lock the meeting row. Cancellation updates state and revokes existing invitations atomically. Concurrent edits and issuance check latest locked state in the database. Link expiry/lock/status are checked on every validation; no service-role key is needed. The per-meeting limit of 20 active links is not a general rate limiter or participant limit.
+
+My meetings retains cancelled records, supports filters/search and edits future schedules. Dates are UTC in PostgreSQL and device-local in the UI. Actual meeting-session lifecycle remains a later video phase.
+
 ## Phase 2 implementation
 
 Supabase cookie sessions now protect dashboard, meetings and settings through both the Next.js proxy and server-side layout/actions. `getUser()` validates current identity and email confirmation; client metadata is used only for display. The proxy forwards refresh cookies and private cache headers. Callback routes verify OTP hashes or exchange PKCE codes and use allowlisted local destinations; `APP_URL` supplies the trusted origin for proxy redirects.

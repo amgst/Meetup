@@ -1,8 +1,8 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
-import type { Meeting } from '@/types/meeting';
-import { loadMeetings, createMeeting, cancelMeeting } from '@/app/(workspace)/actions';
-type Store = { meetings: Meeting[]; ready: boolean; error: string; create: (input: Omit<Meeting,'id'>) => Promise<Meeting>; cancel: (id: string) => Promise<void>; retry: () => void };
+import type { Meeting, MeetingInput } from '@/types/meeting';
+import { loadMeetings, createMeeting, cancelMeeting, editMeeting } from '@/app/(workspace)/actions';
+type Store = { meetings: Meeting[]; ready: boolean; error: string; create: (input: MeetingInput) => Promise<Meeting>; cancel: (id: string) => Promise<void>; edit: (id: string, input: MeetingInput) => Promise<void>; retry: () => void };
 const Context = createContext<Store | null>(null);
 export function MeetingProvider({ children }: { children: React.ReactNode }) {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -19,7 +19,7 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
       .finally(() => { if (active) setReady(true); });
     return () => { active = false; };
   }, [attempt]);
-  async function create(input: Omit<Meeting, 'id'>) {
+  async function create(input: MeetingInput) {
     const result = await createMeeting(input);
     if (result.error || !result.data) throw new Error(result.error || 'Could not save this meeting.');
     setMeetings(current => [result.data!, ...current]);
@@ -28,9 +28,14 @@ export function MeetingProvider({ children }: { children: React.ReactNode }) {
   async function cancel(id: string) {
     const result = await cancelMeeting(id);
     if (result.error) throw new Error(result.error);
-    setMeetings(current => current.filter(m => m.id !== id));
+    setMeetings(current => current.map(m => m.id === id ? {...m,status:'cancelled'} : m));
+  }
+  async function edit(id: string, input: MeetingInput) {
+    const result = await editMeeting(id,input);
+    if(result.error || !result.data)throw new Error(result.error || 'Could not edit meeting.');
+    setMeetings(current => current.map(m => m.id === id ? result.data! : m));
   }
   function retry() { setReady(false); setAttempt(value => value + 1); }
-  return <Context.Provider value={{ meetings, ready, error, create, cancel, retry }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ meetings, ready, error, create, cancel, edit, retry }}>{children}</Context.Provider>;
 }
 export function useMeetings() { const value = useContext(Context); if (!value) throw new Error('MeetingProvider is required'); return value; }

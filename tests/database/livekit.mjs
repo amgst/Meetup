@@ -1,0 +1,35 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const db=new PGlite();const owner='11111111-1111-4111-8111-111111111111';const room='wbify-preview-video001';
+try{
+  await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+    create schema auth;create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+    grant usage on schema public,auth to anon,authenticated,service_role;grant execute on function auth.uid() to anon,authenticated,service_role;
+    insert into auth.users(id) values('${owner}');`);
+  for(const file of ['202611160001_phase2.sql','202611160002_phase3.sql','202611160003_phase4.sql','202611160003_phase4.sql'])await db.exec(await readFile(new URL(`../../supabase/migrations/${file}`,import.meta.url),'utf8'));
+  await db.exec(`insert into meetings(id,owner_id,title,starts_at) values('${room}','${owner}','Video test',now())`);
+  const event=async(id,kind,time,identity='guest-test')=>(await db.query('select record_livekit_event($1,$2,$3,$4,$5,$6,$7) as ok',[id,kind,room,'RM_test',identity,'Test participant',time])).rows[0].ok;
+  await db.exec('set role anon');await assert.rejects(event('1','room_started','2026-11-16T10:00:00Z'),/permission denied/);
+  await db.exec('reset role;set role authenticated');await assert.rejects(event('1','room_started','2026-11-16T10:00:00Z'),/permission denied/);
+  await assert.rejects(db.exec('select * from livekit_events'),/permission denied/);
+  await db.exec('reset role;set role service_role');
+  assert.equal(await event('1','room_started','2026-11-16T10:00:00Z'),true);
+  assert.equal(await event('1','room_started','2026-11-16T10:00:00Z'),false);
+  await event('2','participant_joined','2026-11-16T10:01:00Z',`user-${owner}`);
+  await event('3','participant_joined','2026-11-16T10:02:00Z');
+  await event('4','participant_left','2026-11-16T10:04:00Z');
+  await event('5','participant_joined','2026-11-16T10:03:00Z');
+  await db.exec('reset role');
+  const states=await db.query('select p.role,a.state from meeting_participants p join meeting_admissions a on a.participant_id=p.id order by role');
+  assert.deepEqual(states.rows,[{role:'guest',state:'left'},{role:'host',state:'connected'}]);
+  await db.exec('set role service_role');
+  await event('6','room_finished','2026-11-16T10:05:00Z');
+  await event('7','participant_joined','2026-11-16T10:06:00Z');
+  await event('8','room_started','2026-11-16T09:59:00Z');
+  await db.exec('reset role');
+  assert.equal((await db.query("select count(*)::int as n from meeting_admissions where state='connected'")).rows[0].n,0);
+  assert.equal((await db.query('select count(*)::int as n from meeting_sessions where ended_at is not null')).rows[0].n,1);
+  console.log('PASS: Phase 4 lifecycle migration/retry, service-only writes, webhook idempotency, out-of-order participants, host identity, closed sessions stay closed');
+}finally{await db.close();}

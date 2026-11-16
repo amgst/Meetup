@@ -6,6 +6,7 @@ test('instant invitation persists across reload and opens the room preview', asy
   await page.getByRole('button', { name: 'New meeting' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Create invitation link', exact: true }).click();
   const invitation = await dialog.getByLabel('Meeting link').inputValue();
   await expect(dialog.getByRole('link', { name: 'Open meeting preview' })).toHaveAttribute('href', /\/room\/wbify-preview-/);
   await dialog.getByRole('button', { name: 'Close dialog' }).click();
@@ -13,7 +14,7 @@ test('instant invitation persists across reload and opens the room preview', asy
   await expect(page.getByText('Instant meeting', { exact: true }).last()).toBeVisible();
   await page.goto(invitation);
   await expect(page.getByRole('heading', { name: 'Your meeting workspace' })).toBeVisible();
-  await expect(page.getByText('Live video is planned for Phase 4.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button',{name:'Set up devices'})).toBeVisible();
 });
 test('schedules and cancels a future meeting', async ({ page }) => {
   await page.goto('/meetings/schedule');
