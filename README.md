@@ -20,7 +20,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-public-key
 ```
 
-A legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` is also supported. `APP_URL` must be the exact trusted app origin (including port); use the real HTTPS deployment origin on Vercel. Server secrets stay unprefixed and uncommitted. Phase 2 does not use a service-role key. `.env.local` is ignored by Git.
+A legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` is also supported. `APP_URL` records the app origin (including port); use the real HTTPS deployment origin on Vercel. Authentication redirects and token same-origin checks use the current request origin so a stale localhost setting cannot send hosted users to a different site. Server secrets stay unprefixed and uncommitted. Phase 2 does not use a service-role key. `.env.local` is ignored by Git.
 
 ## Required Supabase setup
 
@@ -129,3 +129,11 @@ The endpoint verifies the exact raw body and authorization signature with the of
 Local database tests cover event privileges, replay/idempotency and out-of-order lifecycle updates. Browser tests use an isolated LiveKit control-plane double; they verify token signatures/grants/TTL, owner/guest authorization, stable guest identity, a full-room response, cross-origin rejection, device setup and verified webhook ingestion. They do not transport WebRTC media. No fake credentials are used outside isolated tests, and no live cloud calls are made by that test suite.
 
 Before launch, verify an actual host and guest call on separate devices: audio both ways, camera toggle, screen sharing, chat, speaker/device choice, reconnect and leaving. Then test 11 simultaneous participants, same-user reconnects and moderation in Phase 5. Localhost invitation links only work on the same machine; use the hosted HTTPS domain for other participants.
+
+## Vercel redirect configuration
+
+For the production deployment, set `APP_URL=https://meetup-blue-mu.vercel.app` in Vercel environment settings and redeploy. The proxy now preserves the current request origin independently of APP_URL, including preview deployment domains. Same-origin video token checks follow the same rule. Arbitrary forwarded-host headers are not used to choose redirect targets.
+
+In Supabase Authentication > URL Configuration, set Site URL to `https://meetup-blue-mu.vercel.app` and add the exact deployed `/auth/callback`, `/auth/callback?next=/reset-password` and `/auth/confirm` redirect URLs. Email templates using SiteURL still depend on the Supabase setting and cannot be corrected by frontend code. Keep localhost URLs as additional allowed URLs only while local development is needed.
+
+Authentication/video browser regression checks deliberately use a stale localhost APP_URL and assert that anonymous navigation stays on the current deployment origin.

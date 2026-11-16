@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSupabaseConfig } from '@/lib/supabase/config';
 import type { Database } from '@/types/database';
+import { requestOrigin } from '@/lib/auth/request-origin';
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
   response.headers.set('Cache-Control', 'private, no-store');
@@ -19,7 +20,7 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await client.auth.getUser();
   const protectedPath = /^\/(dashboard|meetings|settings|reset-password)(\/|$)/.test(request.nextUrl.pathname);
   if (protectedPath && (!user || !user.email_confirmed_at)) {
-    const target = new URL(user ? '/verify-email' : '/login', process.env.APP_URL || request.url);
+    const target = new URL(user ? '/verify-email' : '/login', requestOrigin(request));
     const redirect = NextResponse.redirect(target);
     response.cookies.getAll().forEach(cookie => redirect.cookies.set(cookie));
     for (const name of ['cache-control','expires','pragma']) {

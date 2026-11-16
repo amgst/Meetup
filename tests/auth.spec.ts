@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createAccount, latestEmail, login, password } from './support/accounts';
 test('protected routes reject anonymous and forged sessions', async ({ page, context }) => {
   for(const path of ['/dashboard','/meetings','/settings','/reset-password']) {
-    await page.goto(path);await expect(page).toHaveURL(/\/login$/);
+    await page.goto(path);await expect(page).toHaveURL('http://127.0.0.1:3100/login');
   }
   // A session-shaped cookie alone is insufficient: server asks Auth for the user.
   const forged = Buffer.from(JSON.stringify({access_token:'forged',refresh_token:'forged',expires_at:9999999999,user:{id:'attacker'}})).toString('base64url');

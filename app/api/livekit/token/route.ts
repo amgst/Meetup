@@ -4,12 +4,13 @@ import { createClient } from '@/lib/supabase/server';
 import { roomIdSchema,invitationTokenSchema } from '@/lib/meetings/validation';
 import { createRoomService,getLiveKitConfig,isLiveKitConfigured } from '@/lib/livekit/server';
 import { guestIdentity,maxParticipants,mintParticipantToken } from '@/lib/livekit/token';
+import { requestOrigin } from '@/lib/auth/request-origin';
 export const runtime='nodejs';
 const schema=z.object({roomId:roomIdSchema,invitationToken:invitationTokenSchema.optional(),name:z.string().trim().min(1).max(80)});
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'private, no-store'}});
 export async function POST(request:NextRequest){
   const origin=request.headers.get('origin');
-  if(!origin || origin!==new URL(process.env.APP_URL || request.url).origin)return json({error:'This request must come from the meeting website.'},403);
+  if(!origin || origin!==requestOrigin(request))return json({error:'This request must come from the meeting website.'},403);
   if(Number(request.headers.get('content-length') || 0)>4096)return json({error:'Request too large.'},413);
   let input:z.infer<typeof schema>;
   try{input=schema.parse(await request.json());}catch{return json({error:'Enter a valid meeting and display name.'},400);}
@@ -37,7 +38,7 @@ export async function POST(request:NextRequest){
     if(participants.length>=maxParticipants && !participants.some(p=>p.identity===identity))return json({error:'This meeting is full. Please try again after someone leaves.'},409);
     const token=await mintParticipantToken(config,input.roomId,identity,input.name,isHost);
     const response=json({token,serverUrl:config.url});
-    if(!isHost)response.cookies.set(cookieName,guest.cookie,{httpOnly:true,sameSite:'strict',secure:process.env.NODE_ENV==='production' && new URL(process.env.APP_URL || request.url).protocol==='https:',maxAge:86400,path:'/api/livekit/token'});
+    if(!isHost)response.cookies.set(cookieName,guest.cookie,{httpOnly:true,sameSite:'strict',secure:new URL(requestOrigin(request)).protocol==='https:',maxAge:86400,path:'/api/livekit/token'});
     return response;
   }catch{return json({error:'Unable to connect to the video service. Check the LiveKit project settings and retry.'},503);}
 }

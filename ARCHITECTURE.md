@@ -22,7 +22,7 @@ My meetings retains cancelled records, supports filters/search and edits future 
 
 ## Phase 2 implementation
 
-Supabase cookie sessions now protect dashboard, meetings and settings through both the Next.js proxy and server-side layout/actions. `getUser()` validates current identity and email confirmation; client metadata is used only for display. The proxy forwards refresh cookies and private cache headers. Callback routes verify OTP hashes or exchange PKCE codes and use allowlisted local destinations; `APP_URL` supplies the trusted origin for proxy redirects.
+Supabase cookie sessions now protect dashboard, meetings and settings through both the Next.js proxy and server-side layout/actions. `getUser()` validates current identity and email confirmation; client metadata is used only for display. The proxy forwards refresh cookies and private cache headers. Callback routes verify OTP hashes or exchange PKCE codes and use allowlisted local destinations; Proxy redirects preserve the current request origin; a stale APP_URL cannot redirect hosted users to localhost. Video token same-origin checks use the same origin helper.
 
 Profiles are created through a database trigger and backfilled for existing accounts. Server actions validate profile updates and meeting input with Zod. MeetingProvider now loads from authenticated server actions and updates state only after a database success. Cancellation uses a narrow owner-checked database function instead of a broad update grant.
 
