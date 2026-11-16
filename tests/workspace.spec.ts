@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { createAccount, login } from './support/accounts';
+test.beforeEach(async ({ page, request }) => { await login(page,await createAccount(request)); });
 test('instant invitation persists across reload and opens the room preview', async ({ page }) => {
   await page.goto('/dashboard');
   await page.getByRole('button', { name: 'New meeting' }).click();

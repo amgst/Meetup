@@ -1,34 +1,36 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { Meeting } from '@/types/meeting';
-import { meetingSchema } from '@/lib/meetings/validation';
-const key = 'wbify-next-preview-meetings-v1';
-type Store = { meetings: Meeting[]; ready: boolean; error: string; create: (input: Omit<Meeting, 'id'>) => Meeting; cancel: (id: string) => void };
+import { loadMeetings, createMeeting, cancelMeeting } from '@/app/(workspace)/actions';
+type Store = { meetings: Meeting[]; ready: boolean; error: string; create: (input: Omit<Meeting,'id'>) => Promise<Meeting>; cancel: (id: string) => Promise<void>; retry: () => void };
 const Context = createContext<Store | null>(null);
 export function MeetingProvider({ children }: { children: React.ReactNode }) {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    try {
-      const saved: unknown = JSON.parse(localStorage.getItem(key) || '[]');
-      if (!Array.isArray(saved)) throw new Error();
-      const valid = saved.filter((m): m is Meeting => !!m && typeof m.id === 'string' && /^wbify-preview-[a-z0-9-]{8,64}$/i.test(m.id) && typeof m.title === 'string' && typeof m.when === 'number' && Number.isFinite(m.when) && typeof m.scheduled === 'boolean' && typeof m.notes === 'string');
-      setMeetings(valid);
-    } catch { setError('Saved preview meetings could not be read. New meetings can still be created.'); }
-    setReady(true);
-  }, []);
-  function persist(next: Meeting[]) {
-    localStorage.setItem(key, JSON.stringify(next));
-    setMeetings(next);
+    let active = true;
+    loadMeetings().then(result => {
+      if (!active) return;
+      if (result.error) { setError(result.error); setMeetings([]); }
+      else { setMeetings(result.data!); setError(''); }
+    }).catch(() => { if (active) setError('Could not load meetings. Check your connection and retry.'); })
+      .finally(() => { if (active) setReady(true); });
+    return () => { active = false; };
+  }, [attempt]);
+  async function create(input: Omit<Meeting, 'id'>) {
+    const result = await createMeeting(input);
+    if (result.error || !result.data) throw new Error(result.error || 'Could not save this meeting.');
+    setMeetings(current => [result.data!, ...current]);
+    return result.data;
   }
-  function create(input: Omit<Meeting, 'id'>) {
-    const data = meetingSchema.parse(input);
-    const meeting = { ...data, id: `wbify-preview-${crypto.randomUUID()}` };
-    persist([meeting, ...meetings]);
-    return meeting;
+  async function cancel(id: string) {
+    const result = await cancelMeeting(id);
+    if (result.error) throw new Error(result.error);
+    setMeetings(current => current.filter(m => m.id !== id));
   }
-  function cancel(id: string) { persist(meetings.filter(m => m.id !== id)); }
-  return <Context.Provider value={{ meetings, ready, error, create, cancel }}>{children}</Context.Provider>;
+  function retry() { setReady(false); setAttempt(value => value + 1); }
+  return <Context.Provider value={{ meetings, ready, error, create, cancel, retry }}>{children}</Context.Provider>;
 }
 export function useMeetings() { const value = useContext(Context); if (!value) throw new Error('MeetingProvider is required'); return value; }

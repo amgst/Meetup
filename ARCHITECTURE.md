@@ -1,6 +1,16 @@
 # WBIFY Meet architecture
 
-## Current implementation
+## Phase 2 implementation
+
+Supabase cookie sessions now protect dashboard, meetings and settings through both the Next.js proxy and server-side layout/actions. `getUser()` validates current identity and email confirmation; client metadata is used only for display. The proxy forwards refresh cookies and private cache headers. Callback routes verify OTP hashes or exchange PKCE codes and use allowlisted local destinations; `APP_URL` supplies the trusted origin for proxy redirects.
+
+Profiles are created through a database trigger and backfilled for existing accounts. Server actions validate profile updates and meeting input with Zod. MeetingProvider now loads from authenticated server actions and updates state only after a database success. Cancellation uses a narrow owner-checked database function instead of a broad update grant.
+
+The additive Phase 2 migration provisions all eight requested tables with keys, constraints, indexes, timestamp triggers and RLS. Existing meeting IDs/data remain compatible. Browser roles cannot write admission, participant, recording or billing state, or read invitation hashes. No service-role credential is used by this phase. The lifecycle tables are foundations, not functioning admission enforcement.
+
+Local PostgreSQL tests cover fresh/legacy migrations and permissions. Browser tests use an isolated Auth double plus real SQL migration; live Supabase email delivery and dashboard configuration are separate verification steps. The prototype remains in dist/. New account-owned meetings share its existing table, but the static UI does not understand cancellation.
+
+## Phase 1 foundation (historical)
 
 Phase 1 replaces the frontend structure with Next.js App Router, React, TypeScript, and Tailwind. The original design is retained through extracted CSS and reusable React components. The existing `dist/` prototype remains independent and unchanged by this migration.
 
