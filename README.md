@@ -137,3 +137,11 @@ For the production deployment, set `APP_URL=https://meetup-blue-mu.vercel.app` i
 In Supabase Authentication > URL Configuration, set Site URL to `https://meetup-blue-mu.vercel.app` and add the exact deployed `/auth/callback`, `/auth/callback?next=/reset-password` and `/auth/confirm` redirect URLs. Email templates using SiteURL still depend on the Supabase setting and cannot be corrected by frontend code. Keep localhost URLs as additional allowed URLs only while local development is needed.
 
 Authentication/video browser regression checks deliberately use a stale localhost APP_URL and assert that anonymous navigation stays on the current deployment origin.
+
+## Meeting views and mobile stability
+
+The in-call View selector offers Grid, Spotlight and Sidebar. Click a tile or choose Focus to select the main participant/screen manually. Grid shows every tile in a scrollable area; it does not auto-page or slide when speakers change. Spotlight and Sidebar retain the selected focus until it leaves. Mobile Sidebar uses a main tile with smaller tiles below it.
+
+The conference uses stable identity/source keys and first-seen ordering, a single persistent LiveKit Room instance, and a small-viewport-height layout. Speaking updates affect tile indicators rather than participant ordering. Screen shares appear as additional tiles and can be focused manually. Chat overlays the stage without resizing the tile grid. Camera/microphone/share/chat/device/leave controls remain available.
+
+`tests/layouts.spec.ts` uses SDK-simulated participants in a build-gated test route. It checks that speaker/track-list updates do not remove tile nodes, change order, reset mobile scrolling, or replace a manually chosen focus. Real-device media/OS/browser flicker still needs validation after deployment; these tests do not simulate a real mobile WebRTC call.
