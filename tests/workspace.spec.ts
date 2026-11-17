@@ -35,6 +35,7 @@ test('schedules and cancels a future meeting', async ({ page }) => {
 test('join validates input and responsive navigation is available', async ({ page, isMobile }) => {
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Good to see you' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New meeting' })).toBeEnabled();
   await page.screenshot({ path: `test-results/dashboard-${isMobile ? 'mobile' : 'desktop'}.png`, fullPage: true });
   if (isMobile) {
     const nav = page.getByRole('navigation', { name: 'Mobile navigation' });
